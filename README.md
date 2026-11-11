@@ -96,10 +96,13 @@ are set by the image; locally, secure cookies are used only for HTTPS requests.
 
 #### Backend Configuration
 
-create a file named .env with following content.
+Copy `packages/server/.env.example` to an untracked `.env` file, or create one
+with the following content:
 ```
 HOST=0.0.0.0
 PORT=8080
+DB_HOST=203.0.113.10
+DB_PORT=3306
 DATABASE=trojan
 USERNAME=username
 PASSWORD=password
@@ -108,6 +111,18 @@ ADMIN_PASSWORD=850702
 LOG=false
 
 ```
+
+Replace `203.0.113.10` with your external MySQL server's IP address or hostname.
+`DB_HOST` defaults to `localhost` and `DB_PORT` defaults to `3306` when omitted.
+`HOST` controls the HTTP listener, not the database connection. Leave
+`DB_SOCKET_PATH` unset when connecting over TCP. The database must allow
+connections from the application's network and the configured database user.
+Load this file with `twManagerServer --env=/path/to/.env`, or pass it to the
+container with `docker run --env-file /path/to/.env ...`.
+Cloud Run does not automatically load your local `.env`; configure `DB_HOST`
+and `DB_PORT` as service environment variables and passwords through Secret
+Manager as described above.
+
 #### Start frontend
 ``
 nohup twManager > twm.log 2>&1 &

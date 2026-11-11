@@ -16,12 +16,19 @@ jest.mock("./service/userService.js", () => ({
 describe("combined Cloud Run service", () => {
   let server, request, sequelize, nodeCache, clientRoot;
   const originalEnv = { ...process.env };
+  const originalArgv = [...process.argv];
 
   beforeAll(async () => {
     clientRoot = fs.mkdtempSync(path.join(os.tmpdir(), "twm-client-"));
     fs.writeFileSync(path.join(clientRoot, "index.html"), "<html>Trojan Web Manager</html>");
     fs.mkdirSync(path.join(clientRoot, "assets"));
     fs.writeFileSync(path.join(clientRoot, "assets", "app.js"), "console.log('client');");
+    const envPath = path.join(clientRoot, "database.env");
+    fs.writeFileSync(envPath, "DB_HOST=203.0.113.10\nDB_PORT=3307\n");
+    delete process.env.DB_HOST;
+    delete process.env.DB_PORT;
+    delete process.env.DB_SOCKET_PATH;
+    process.argv.push("--env", envPath);
     Object.assign(process.env, {
       HOST: "127.0.0.1",
       PORT: "0",
@@ -47,6 +54,13 @@ describe("combined Cloud Run service", () => {
     if (nodeCache) nodeCache.close();
     fs.rmSync(clientRoot, { recursive: true });
     process.env = originalEnv;
+    process.argv = originalArgv;
+  });
+
+  it("loads an external database IP and port from the selected .env file", () => {
+    expect(sequelize.config.host).toBe("203.0.113.10");
+    expect(sequelize.config.port).toBe(3307);
+    expect(sequelize.options.dialectOptions).toEqual({});
   });
 
   it.each(["/", "/login", "/users", "/admin/42"])("serves the SPA at %s", async (url) => {
