@@ -1,0 +1,315 @@
+openapi: 3.0.3
+info:
+  title: Trojan Web Manager API
+  description: |
+    HTTP API exposed by the Trojan Web Manager server.
+
+    Administrative endpoints use the `access_token` cookie issued by
+    `GET /signin`, except for `PUT /extendById`, which is currently not
+    protected by the server's authentication middleware.
+  version: 0.8.1
+servers:
+  - url: http://localhost:8080
+    description: Local server (the port is configurable with `PORT`)
+tags:
+  - name: Authentication
+  - name: Users
+  - name: Expiration
+paths:
+  /signin:
+    get:
+      tags:
+        - Authentication
+      summary: Sign in as the administrator
+      description: |
+        Validates the administrator credentials configured with `ADMIN` and
+        `ADMIN_PASSWORD`. On success, sets an `access_token` HTTP-only cookie.
+      parameters:
+        - name: username
+          in: query
+          required: true
+          schema:
+            type: string
+          description: Administrator username.
+        - name: password
+          in: query
+          required: true
+          schema:
+            type: string
+            format: password
+          description: Administrator password.
+      responses:
+        '200':
+          description: Signed in; the response sets the `access_token` cookie.
+          headers:
+            Set-Cookie:
+              description: HTTP-only session cookie used for authenticated requests.
+              schema:
+                type: string
+                example: access_token=uuid; HttpOnly
+        '401':
+          description: Invalid credentials.
+  /users:
+    get:
+      tags:
+        - Users
+      summary: List users
+      description: Returns a page of users, optionally filtered by user ID.
+      security:
+        - AccessTokenCookie: []
+      parameters:
+        - name: offset
+          in: query
+          required: true
+          schema:
+            type: integer
+            minimum: 0
+          description: Number of users to skip.
+        - name: limit
+          in: query
+          required: true
+          schema:
+            type: integer
+            minimum: 0
+          description: Maximum number of users to return.
+        - name: id
+          in: query
+          required: false
+          schema:
+            type: integer
+          description: Restrict results to this user ID.
+      responses:
+        '200':
+          description: A page of users and the total user count.
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - users
+                  - total
+                properties:
+                  users:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/User'
+                  total:
+                    type: integer
+                    description: Total number of users in the database.
+              example:
+                users:
+                  - id: 1
+                    username: alice
+                    password: hashed-password
+                    start: '2024-01-01T00:00:00.000Z'
+                    delta: 1
+                    quota: -1
+                    download: '0'
+                    upload: '0'
+                    version: 0
+                total: 1
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+  /expiration:
+    get:
+      tags:
+        - Expiration
+      summary: Get a user's expiration
+      description: |
+        Looks up a user's expiration by their username and plaintext password.
+        This route does not require the administrator session cookie.
+      parameters:
+        - name: username
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: password
+          in: query
+          required: true
+          schema:
+            type: string
+            format: password
+      responses:
+        '200':
+          description: Expiration result rows; the day count can be null if unavailable.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  required:
+                    - expiration
+                  properties:
+                    expiration:
+                      type: integer
+                      nullable: true
+                      description: Days until expiration.
+              example:
+                - expiration: 30
+  /extend:
+    put:
+      tags:
+        - Expiration
+      summary: Extend a user's expiration by credentials
+      description: |
+        Extends the user's expiration by the requested number of months.
+        If the current expiration has passed, the extension starts from now.
+        The password is supplied in plaintext and hashed by the server for lookup.
+      security:
+        - AccessTokenCookie: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ExtendByCredentialsRequest'
+      responses:
+        '200':
+          description: The updated user.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+  /extendById:
+    put:
+      tags:
+        - Expiration
+      summary: Extend a user's expiration by ID
+      description: |
+        Extends the user's expiration by the requested number of months.
+        If the current expiration has passed, the extension starts from now.
+        This route is currently not protected by the server's authentication middleware.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ExtendByIdRequest'
+      responses:
+        '200':
+          description: The updated user, or an empty object if the user was not found.
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: '#/components/schemas/User'
+                  - type: object
+                    additionalProperties: false
+  /adduser:
+    post:
+      tags:
+        - Users
+      summary: Create a user
+      description: The supplied password is hashed by the server before it is stored.
+      security:
+        - AccessTokenCookie: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateUserRequest'
+      responses:
+        '200':
+          description: The created user.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+components:
+  securitySchemes:
+    AccessTokenCookie:
+      type: apiKey
+      in: cookie
+      name: access_token
+  responses:
+    Unauthorized:
+      description: Missing or invalid administrator session cookie.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error: Access denied. Please login!
+  schemas:
+    CreateUserRequest:
+      type: object
+      required:
+        - username
+        - password
+      properties:
+        username:
+          type: string
+        password:
+          type: string
+          format: password
+    ExtendByCredentialsRequest:
+      type: object
+      required:
+        - username
+        - password
+        - quantity
+      properties:
+        username:
+          type: string
+        password:
+          type: string
+          format: password
+        quantity:
+          type: integer
+          description: Number of months to add.
+    ExtendByIdRequest:
+      type: object
+      required:
+        - id
+        - quantity
+      properties:
+        id:
+          type: integer
+        quantity:
+          type: integer
+          description: Number of months to add.
+    User:
+      type: object
+      properties:
+        id:
+          type: integer
+        username:
+          type: string
+        password:
+          type: string
+          description: Stored password hash returned by the current API.
+        start:
+          type: string
+          format: date-time
+          nullable: true
+        delta:
+          oneOf:
+            - type: integer
+            - type: string
+          description: Subscription duration in months.
+        quota:
+          type: integer
+          description: A value of -1 indicates unlimited quota.
+        download:
+          oneOf:
+            - type: integer
+            - type: string
+        upload:
+          oneOf:
+            - type: integer
+            - type: string
+        version:
+          type: integer
+          description: Sequelize optimistic-lock version.
+    Error:
+      type: object
+      properties:
+        error:
+          type: string
