@@ -69,6 +69,15 @@ allows access to the login page; application administrator authentication still
 applies to protected API routes, including `/api/extendById`, which now requires
 the same administrator cookie as the other subscription mutation endpoints.
 
+For continuous deployment from GitHub, configure the Cloud Build trigger with
+**Configuration: Cloud Build configuration file** and location `/cloudbuild.yaml`.
+That file disables BuildKit provenance/SBOM attestations, which Cloud Run cannot
+import as runnable images, then deploys the commit-tagged image to
+`trojan-web-manager` in `asia-east1`. Override `_SERVICE` or `_REGION` in the
+trigger if needed. The Cloud Build service account needs **Cloud Run Admin** and
+**Service Account User** on the runtime service account. Existing Cloud Run
+environment variables and secrets are preserved on each deploy.
+
 For a different reachable MySQL server, omit `--add-cloudsql-instances` and
 replace `DB_SOCKET_PATH` with `DB_HOST` and optionally `DB_PORT` (default `3306`).
 Private-IP databases require Cloud Run VPC networking. `HOST` is the HTTP bind
