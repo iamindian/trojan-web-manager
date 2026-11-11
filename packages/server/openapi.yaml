@@ -5,8 +5,7 @@ info:
     HTTP API exposed by the Trojan Web Manager server.
 
     Administrative endpoints use the `access_token` cookie issued by
-    `GET /signin`, except for `PUT /extendById`, which is currently not
-    protected by the server's authentication middleware.
+    `GET /signin`. The combined Cloud Run service exposes these paths under `/api`.
   version: 0.8.1
 servers:
   - url: http://localhost:8080
@@ -182,7 +181,8 @@ paths:
       description: |
         Extends the user's expiration by the requested number of months.
         If the current expiration has passed, the extension starts from now.
-        This route is currently not protected by the server's authentication middleware.
+      security:
+        - AccessTokenCookie: []
       requestBody:
         required: true
         content:
@@ -199,6 +199,8 @@ paths:
                   - $ref: '#/components/schemas/User'
                   - type: object
                     additionalProperties: false
+        '401':
+          $ref: '#/components/responses/Unauthorized'
   /adduser:
     post:
       tags:
