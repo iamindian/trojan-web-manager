@@ -16,27 +16,22 @@ import { init as userModel } from "./models/User.model.js";
 // const __dirname = dirname(__filename);
 import yargs from 'yargs'
 import { ssh224 } from "./utils/index.js";
+import { serveClient } from "./serve-client.js";
 const args = yargs(process.argv.slice(2)).argv
 if (args.env) {
   dotenv.config({ path: args.env });
 } else {
   dotenv.config({ path: path.resolve(__dirname, '../.env') });
 }
-console.info('admin:' + process.env.ADMIN);
-console.info('admin_password:' + process.env.ADMIN_PASSWORD)
-console.info('database:' + process.env.DATABASE)
-console.info('host:' + process.env.HOST)
-console.info('username:' + process.env.USERNAME)
-console.info('password' + process.env.PASSWORD)
 const nodeCache = new NodeCache({ stdTTL: 120, checkperiod: 120 });
-nodeCache.on('set', (key, value) => {
-  console.log(`node cache set ${key}->${value}`)
-})
 const database = process.env.DATABASE;
 const username = process.env.USERNAME;
 const password = process.env.PASSWORD;
 const sequelize = new Sequelize(database, username, password, {
   dialect: "mysql",
+  host: process.env.DB_HOST || "localhost",
+  port: Number(process.env.DB_PORT || 3306),
+  dialectOptions: process.env.DB_SOCKET_PATH ? { socketPath: process.env.DB_SOCKET_PATH } : {},
   pool: {
     max: 5,
     idle: 30000,
@@ -46,9 +41,11 @@ const sequelize = new Sequelize(database, username, password, {
   logging: true,
 });
 const app = new Koa();
-const router = new Router();
-const HOST = process.env.HOST;
-const HTTP_PORT = process.env.PORT;
+app.proxy = process.env.TRUST_PROXY === "true";
+const apiPrefix = process.env.API_PREFIX || "";
+const router = new Router({ prefix: apiPrefix });
+const HOST = process.env.HOST || "0.0.0.0";
+const HTTP_PORT = Number(process.env.PORT || 8080);
 // const HTTPS_PORT = 443;
 const userAuth = function () {
   return async function (ctx, next) {
@@ -83,14 +80,14 @@ const cached = async (ctx, key, func) => {
 function setToken(ctx) {
   const newToken = uuidv4();
   nodeCache.set(newToken, Date.now());
-  ctx.cookies.set('access_token', newToken, { httpOnly: true, secure: false, sameSite: "none", secureProxy: true });
+  ctx.cookies.set('access_token', newToken, { httpOnly: true, secure: ctx.secure, sameSite: "lax" });
   ctx.status = 200;
 }
 async function start() {
   await userModel(sequelize);
   await userService(sequelize);
   app.use(bodyParser());
-  router.use(["/users", "/extend", "/adduser"], userAuth())
+  router.use(["/users", "/extend", "/extendById", "/adduser"], userAuth())
   const handleError = function (ctx, e) {
     ctx.body = { error: e.message };
   }
@@ -182,8 +179,11 @@ async function start() {
       }
     });
   app.use(router.routes());
-  const server = await app.listen(parseInt(process.env.PORT), () => {
-    console.log(`Server running on http://${process.env.HOST}:${process.env.PORT}`);
+  if (process.env.CLIENT_DIST) {
+    app.use(serveClient(path.resolve(process.env.CLIENT_DIST), apiPrefix));
+  }
+  const server = await app.listen(HTTP_PORT, HOST, () => {
+    console.log(`Server running on http://${HOST}:${server.address().port}`);
   });
   return server;
 }
