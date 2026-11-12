@@ -6,6 +6,8 @@ import { useState, useEffect, useRef ,forwardRef} from "react";
 import { useNavigate } from "react-router-dom";
 import moment from 'moment';
 import Typography from '@mui/material/Typography';
+import Box from '@mui/material/Box';
+import Toolbar from '@mui/material/Toolbar';
 function Users() {
     const ITEM_SIZE = 35;
     const PADDING_SIZE = 5;
@@ -45,7 +47,7 @@ function Users() {
     }
     const Row = ({ index, style }) => {
         let label;
-        style = Object.assign({}, style, { textAlign: "center", lineHeight:"35px"})
+        style = Object.assign({}, style, { textAlign: "center", lineHeight:"35px", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" })
         if (isItemLoaded(index)) {
             const user = users[index];
             label = `Username: ${user.username} , Quota: ${user.quota} , Start: ${moment(user.start).format("MMM Do YY")} , Delta: ${user.delta}`;
@@ -53,8 +55,8 @@ function Users() {
             label = "loading";
         }
         return (<div onClick={() => {
-            click(users[index].id);
-        }} className="List-item" style={style}>
+            if (isItemLoaded(index)) click(users[index].id);
+        }} className="List-item" style={style} title={label}>
             {label}
         </div>);
     };
@@ -71,12 +73,12 @@ function Users() {
             {...rest}
         />
     ));
-    return (<div style={{ display: "flex", justifyContent: "center", alignItems: "center" }}>
-
-        <div style={{ height: "500px", width: "600px" }}>
-            <Typography sx={{ fontSize: 20, textAlign: "center" }} color="text.secondary">
-                Users
-            </Typography>
+    return (<Box sx={{ position: "fixed", inset: 0, display: "flex", flexDirection: "column" }}>
+        <Toolbar />
+        <Typography sx={{ fontSize: 20, textAlign: "center" }} color="text.secondary">
+            Users
+        </Typography>
+        <Box sx={{ flex: 1, minHeight: 0, minWidth: 0 }}>
             <AutoSizer>
 
                 {({ height, width }) => (
@@ -101,8 +103,8 @@ function Users() {
                 )}
 
             </AutoSizer>
-        </div>
-    </div>);
+        </Box>
+    </Box>);
 }
 export function Component() {
     return Users();
