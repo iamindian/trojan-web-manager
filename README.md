@@ -6,7 +6,8 @@ The public Query page looks up expiration by username only, without a password.
 Anyone who knows a username can view its expiration through `/api/expiration`
 (`/expiration` when running the standalone server). Administrator sign-in and
 user creation still require passwords. The Users list is the supported user
-listing page; the Grid page has been removed.
+listing page; it displays a full-page table below the toolbar with infinite
+scrolling and clickable users for editing. The Grid page has been removed.
 ![login capture](./captures/login.png?raw=true "login")
 ![query capture](./captures/query.png?raw=true "query")
 ![renew capture](./captures/renew.png?raw=true "renew")
