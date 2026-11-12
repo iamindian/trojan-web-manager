@@ -17,6 +17,7 @@ import { init as userModel } from "./models/User.model.js";
 import yargs from 'yargs'
 import { ssh224 } from "./utils/index.js";
 import { serveClient } from "./serve-client.js";
+import { serveDocs } from "./serve-docs.js";
 const args = yargs(process.argv.slice(2)).argv
 if (args.env) {
   dotenv.config({ path: args.env });
@@ -179,6 +180,7 @@ async function start() {
       }
     });
   app.use(router.routes());
+  app.use(serveDocs(apiPrefix));
   if (process.env.CLIENT_DIST) {
     app.use(serveClient(path.resolve(process.env.CLIENT_DIST), apiPrefix));
   }

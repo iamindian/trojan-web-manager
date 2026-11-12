@@ -21,6 +21,7 @@ ENV NODE_ENV=production \
 WORKDIR /app
 COPY --from=build --chown=node:node /runtime/node_modules ./node_modules
 COPY --from=build --chown=node:node /app/packages/server/dist ./dist
+COPY --from=build --chown=node:node /app/packages/server/openapi.yaml ./openapi.yaml
 COPY --from=build --chown=node:node /app/packages/client/dist ./public
 USER node
 EXPOSE 8080

@@ -77,6 +77,29 @@ describe("combined Cloud Run service", () => {
     await request.head("/").expect(200).expect("Content-Type", /text\/html/);
   });
 
+  it.each(["/docs", "/docs/"])("serves Swagger UI at %s instead of the client SPA", async (url) => {
+    const response = await request.get(url).expect(200);
+    expect(response.type).toBe("text/html");
+    expect(response.text).toContain('url: "/openapi.json"');
+    expect(response.text).toContain('href="/docs/swagger-ui.css"');
+    expect(response.text).toContain('src="/docs/swagger-ui-bundle.js"');
+    expect(response.text).toContain("validatorUrl: null");
+    expect(response.text).toContain("withCredentials: true");
+  });
+
+  it("serves a same-origin specification and bundled Swagger assets", async () => {
+    const response = await request.get("/openapi.json").expect(200);
+    expect(response.type).toBe("application/json");
+    expect(response.body.openapi).toBe("3.0.3");
+    expect(response.body.servers).toEqual([{ url: "/api", description: "This server" }]);
+    expect(response.body.paths["/signin"].get).toBeDefined();
+    expect(response.body.paths["/extendById"].put.security).toEqual([{ AccessTokenCookie: [] }]);
+    await request.get("/docs/swagger-ui.css").expect(200).expect("Content-Type", /text\/css/);
+    await request.get("/docs/swagger-ui-bundle.js").expect(200).expect("Content-Type", /javascript/);
+    await request.head("/docs").expect(200).expect("Content-Type", /text\/html/);
+    await request.get("/docs/missing").expect(404);
+  });
+
   it.each(["/api", "/api/missing", "/assets/missing.js"])("does not return HTML for %s", async (url) => {
     const response = await request.get(url);
     expect(response.status).toBe(404);

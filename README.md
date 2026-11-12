@@ -69,6 +69,15 @@ allows access to the login page; application administrator authentication still
 applies to protected API routes, including `/api/extendById`, which now requires
 the same administrator cookie as the other subscription mutation endpoints.
 
+Open `/docs` on the service URL to view the self-hosted Swagger UI. The
+machine-readable specification is available at `/openapi.json`; its server URL
+automatically matches the API prefix (`/api` in the container). Sign in through
+the client or Swagger's `/signin` operation before trying administrator endpoints.
+The browser sends the HTTP-only session cookie automatically; it cannot be
+entered through Swagger's Authorize dialog. Documentation assets are bundled
+in the container, and no external Swagger validator is used. The docs are public
+unless access to the entire service is restricted with Cloud Run IAM.
+
 For continuous deployment from GitHub, configure the Cloud Build trigger with
 **Configuration: Cloud Build configuration file** and location `/cloudbuild.yaml`.
 That file disables BuildKit provenance/SBOM attestations, which Cloud Run cannot
