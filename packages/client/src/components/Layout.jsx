@@ -121,7 +121,6 @@ function Layout() {
                 </Button>
                 {isAuthenticated == "true" ? <Button color="inherit" component={NavLink} to="/admin" end>Add</Button> : ""}
                 {isAuthenticated == "true" ? <Button color="inherit" component={NavLink} to="/users" end>Users</Button> : ""}
-                {isAuthenticated == "true" ? <Button color="inherit" component={NavLink} to="/grid" end>Grid</Button> : ""}
                 {isAuthenticated == "true" ? "" : <Button color="inherit" component={NavLink} to="/login" end>Sign In</Button>}
               </Box>
               <Box sx={{ flexGrow: 1 }} ></Box>

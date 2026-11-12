@@ -115,7 +115,8 @@ paths:
         - Expiration
       summary: Get a user's expiration
       description: |
-        Looks up a user's expiration by their username and plaintext password.
+        Looks up expiration by username only; no password is required.
+        Anyone who knows a username can view its expiration.
         This route does not require the administrator session cookie.
       parameters:
         - name: username
@@ -123,15 +124,9 @@ paths:
           required: true
           schema:
             type: string
-        - name: password
-          in: query
-          required: true
-          schema:
-            type: string
-            format: password
       responses:
         '200':
-          description: Expiration result rows; the day count can be null if unavailable.
+          description: Expiration result rows, or an empty array if no users match. The day count can be null if unavailable.
           content:
             application/json:
               schema:
@@ -147,6 +142,12 @@ paths:
                       description: Days until expiration.
               example:
                 - expiration: 30
+        '400':
+          description: Missing or empty username.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
   /extend:
     put:
       tags:

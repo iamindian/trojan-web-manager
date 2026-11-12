@@ -62,6 +62,9 @@ const userAuth = function () {
     await next();
   }
 }
+const handleError = function (ctx, e) {
+  ctx.body = { error: e.message };
+}
 const cached = async (ctx, key, func) => {
   try {
     if (nodeCache.has(key)) {
@@ -74,6 +77,7 @@ const cached = async (ctx, key, func) => {
       ctx.body = result;
     }
   } catch (e) {
+    ctx.status = 500;
     handleError(ctx, e);
   }
 
@@ -89,9 +93,6 @@ async function start() {
   await userService(sequelize);
   app.use(bodyParser());
   router.use(["/users", "/extend", "/extendById", "/adduser"], userAuth())
-  const handleError = function (ctx, e) {
-    ctx.body = { error: e.message };
-  }
   router
     .get("/signin", async (ctx, next) => {
       const username = ctx.request.query.username;
@@ -140,11 +141,15 @@ async function start() {
     })
     .get("/expiration", async (ctx, next) => {
       const username = ctx.request.query.username;
-      const password = ctx.request.query.password;
-      const key = ssh224("/expiration", `${username}:${password}`)
+      if (typeof username !== "string" || !username.trim()) {
+        ctx.status = 400;
+        ctx.body = { error: "username is required" };
+        return;
+      }
+      const key = ssh224("/expiration", username)
       await cached(ctx, key, () => {
         return async () => {
-          return await getUserExpiration(username, password);
+          return await getUserExpiration(username);
         }
       });
     })

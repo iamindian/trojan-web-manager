@@ -9,11 +9,10 @@ export async function signin(username, password){
         }
     })
 }
-export async function getExpiration(username, password){
+export async function getExpiration(username){
     return await axios.get(`${prefix}/expiration`,{
         params:{
-            username,
-            password
+            username
         }
     })
 }

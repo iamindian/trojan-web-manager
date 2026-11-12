@@ -71,16 +71,6 @@ const router = createBrowserRouter([
           return {}
         }
       },
-      {
-        path: "/grid",
-        lazy: () => import("./pages/UserGrid"),
-        loader: async () => {
-          if (sessionStorage.getItem("isAuthenticated") === 'false') {
-            return redirect("/login")
-          }
-          return {};
-        }
-      },
     ],
     // errorElement: <RootBoundary />,
   },
