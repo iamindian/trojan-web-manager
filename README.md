@@ -8,6 +8,10 @@ Anyone who knows a username can view its expiration through `/api/expiration`
 user creation still require passwords. The Users list is the supported user
 listing page; it displays a full-page table below the toolbar with infinite
 scrolling and clickable users for editing. The Grid page has been removed.
+Use the username search field to filter all users, including those not yet loaded.
+Plain text matches anywhere; `*` matches any number of characters (for example
+`alice*smith`). Clearing the field restores all users. Matching case sensitivity
+follows the database collation.
 ![login capture](./captures/login.png?raw=true "login")
 ![query capture](./captures/query.png?raw=true "query")
 ![renew capture](./captures/renew.png?raw=true "renew")

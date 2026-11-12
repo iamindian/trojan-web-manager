@@ -53,7 +53,7 @@ paths:
       tags:
         - Users
       summary: List users
-      description: Returns a page of users, optionally filtered by user ID.
+      description: Returns a page of users, optionally filtered by user ID and username.
       security:
         - AccessTokenCookie: []
       parameters:
@@ -77,9 +77,15 @@ paths:
           schema:
             type: integer
           description: Restrict results to this user ID.
+        - name: username
+          in: query
+          schema:
+            type: string
+          description: Case sensitivity follows the database collation. Matches anywhere; * matches any number of characters. Percent and underscore are literal.
+          example: alice*
       responses:
         '200':
-          description: A page of users and the total user count.
+          description: A page of users and the matching user count.
           content:
             application/json:
               schema:
@@ -94,7 +100,7 @@ paths:
                       $ref: '#/components/schemas/User'
                   total:
                     type: integer
-                    description: Total number of users in the database.
+                    description: Total number of users matching the filters.
               example:
                 users:
                   - id: 1

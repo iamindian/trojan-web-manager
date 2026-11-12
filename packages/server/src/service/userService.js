@@ -1,15 +1,20 @@
 
 import { ssh224 } from "../utils/index.js";
-import { QueryTypes } from "sequelize"
+import { Op, QueryTypes } from "sequelize"
 import BigNumber from "bignumber.js"
 import moment from "moment";
 let sequelize = null;
 export async function init(sequelizeInstance) {
   sequelize = sequelizeInstance;
 }
-export async function getUsers(offset, limit, where) {
+export async function getUsers(offset, limit, filters = {}, username = "") {
+  const where = { ...filters };
+  if (username) {
+    const pattern = username.replace(/[\\%_]/g, "\\$&").replace(/\*/g, "%");
+    where.username = { [Op.like]: `%${pattern}%` };
+  }
   const users = await sequelize.models.User.findAll({ offset, limit, where });
-  const total = await sequelize.models.User.count();
+  const total = await sequelize.models.User.count({ where });
   return { users, total };
 }
 export async function addUser(username, password) {

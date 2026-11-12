@@ -5,14 +5,14 @@ import AutoSizer from "react-virtualized-auto-sizer";
 import InfiniteLoader from "react-window-infinite-loader";
 import axios from "axios";
 import moment from "moment";
-import { Alert, Box, Button, Link, Toolbar, Typography } from "@mui/material";
+import { Alert, Box, Button, Link, TextField, Toolbar, Typography } from "@mui/material";
 
 const prefix = import.meta.env.VITE_API_PREFIX;
 const columns = "80px minmax(180px, 1fr) 120px 160px 180px";
 const rowStyle = { display: "grid", gridTemplateColumns: columns, alignItems: "center" };
 const cellStyle = { px: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" };
 
-function Users() {
+function UsersTable({ username }) {
     const navigate = useNavigate();
     const [users, setUsers] = useState([]);
     const [total, setTotal] = useState(null);
@@ -34,7 +34,7 @@ function Users() {
         const requestController = new AbortController();
         controller.current = requestController;
         pending.current = axios.get(`${prefix}/users`, {
-            params: { offset: loadedUsers.current.length, limit: 25 },
+            params: { offset: loadedUsers.current.length, limit: 25, username },
             signal: requestController.signal,
         }).then(({ data }) => {
             if (requestController.signal.aborted) return;
@@ -50,7 +50,7 @@ function Users() {
             if (controller.current === requestController) pending.current = null;
         });
         return pending.current;
-    }, []);
+    }, [username]);
 
     useEffect(() => () => controller.current?.abort(), []);
 
@@ -81,11 +81,7 @@ function Users() {
     };
 
     return (
-        <Box sx={{ position: "fixed", inset: 0, display: "flex", flexDirection: "column" }}>
-            <Toolbar />
-            <Typography component="h1" sx={{ fontSize: 20, textAlign: "center" }} color="text.secondary">
-                Users
-            </Typography>
+        <>
             {error && (
                 <Alert severity="error" action={
                     <Button color="inherit" onClick={() => {
@@ -132,6 +128,27 @@ function Users() {
                     </Box>
                 </Box>
             </Box>
+        </>
+    );
+}
+
+function Users() {
+    const [search, setSearch] = useState("");
+    const [username, setUsername] = useState("");
+    useEffect(() => {
+        const timer = setTimeout(() => setUsername(search), 300);
+        return () => clearTimeout(timer);
+    }, [search]);
+    return (
+        <Box sx={{ position: "fixed", inset: 0, display: "flex", flexDirection: "column" }}>
+            <Toolbar />
+            <Box sx={{ p: 2 }}>
+                <TextField fullWidth size="small" label="Search username" value={search}
+                    onChange={event => setSearch(event.target.value)}
+                    helperText="Matches anywhere in the username. Use * as a wildcard, e.g. alice*."
+                />
+            </Box>
+            <UsersTable key={username} username={username} />
         </Box>
     );
 }

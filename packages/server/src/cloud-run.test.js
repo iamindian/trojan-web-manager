@@ -124,6 +124,22 @@ describe("combined Cloud Run service", () => {
     expect(getUserExpiration).toHaveBeenLastCalledWith("bob");
   });
 
+  it("forwards username filters and keeps cached search results separate", async () => {
+    const { getUsers } = require("./service/userService.js");
+    const signin = await request.get("/api/signin")
+      .query({ username: "test-admin", password: "test-password" }).expect(200);
+    const cookie = signin.headers["set-cookie"][0].split(";")[0];
+    for (const username of ["alice*", "bob*", ""]) {
+      await request.get("/api/users").set("Cookie", cookie)
+        .query({ offset: 0, limit: 25, username }).expect(200);
+      expect(getUsers).toHaveBeenLastCalledWith(0, 25, {}, username);
+    }
+    const calls = getUsers.mock.calls.length;
+    await request.get("/api/users").set("Cookie", cookie)
+      .query({ offset: 0, limit: 25, username: "alice*" }).expect(200);
+    expect(getUsers).toHaveBeenCalledTimes(calls);
+  });
+
   it.each([{}, { username: "" }, { username: " " }])("rejects an empty expiration query %j", async (query) => {
     await request.get("/api/expiration").query(query)
       .expect(400, { error: "username is required" });

@@ -123,6 +123,12 @@ async function start() {
       const offset = parseInt(ctx.request.query.offset);
       const limit = parseInt(ctx.request.query.limit);
       const id = ctx.request.query.id;
+      const username = ctx.request.query.username || "";
+      if (typeof username !== "string") {
+        ctx.status = 400;
+        ctx.body = { error: "username must be a string" };
+        return;
+      }
       if (Number.isNaN(offset) || Number.isNaN(limit)) {
         ctx.body = { error: 'wrong params' }
         return;
@@ -131,10 +137,10 @@ async function start() {
       if (id && !Number.isNaN(id)) {
         where = Object.assign({}, where, { id })
       }
-      const key = ssh224(`/users`, `${id ? id : ""}:${offset}:${limit}`);
+      const key = ssh224(`/users`, JSON.stringify([id || "", offset, limit, username]));
       await cached(ctx, key, () => {
         return async () => {
-          return await getUsers(offset, limit, where);
+          return await getUsers(offset, limit, where, username);
         }
       });
 
