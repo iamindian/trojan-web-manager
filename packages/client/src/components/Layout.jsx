@@ -4,15 +4,18 @@ import { useSnackbar } from '@mui/base/useSnackbar';
 import { ClickAwayListener } from '@mui/base/ClickAwayListener';
 import { css, keyframes, styled } from '@mui/system';
 import AxiosNavigator from './AxiosNavigator'
-import { NavLink, Outlet } from 'react-router-dom';
-import KeepAlive from './KeepAlive';
+import { NavLink, Outlet, useNavigate } from 'react-router-dom';
+import auth from '../auth';
 import AppBar from '@mui/material/AppBar';
-import { Box, Button, Container, Grid, Toolbar, ThemeProvider, IconButton, Paper } from "@mui/material";
+import { Box, Button, Container, Grid, Toolbar, ThemeProvider, IconButton, Paper, Menu, MenuItem } from "@mui/material";
 import { createTheme } from '@mui/material/styles';
 import AccountCircle from '@mui/icons-material/AccountCircle';
 
 
 function Layout() {
+  const navigate = useNavigate();
+  const [accountMenu, setAccountMenu] = useState(null);
+  const [signingOut, setSigningOut] = useState(false);
   const theme = createTheme({
     palette: {
       primary: {
@@ -96,6 +99,19 @@ function Layout() {
   function closeAlert() {
     setOpen(false);
   }
+  async function signOut() {
+    setSigningOut(true);
+    try {
+      await auth.signout();
+      setAccountMenu(null);
+      navigate("/login");
+    } catch (error) {
+      setAccountMenu(null);
+      openAlert("Could not sign out. Please try again.");
+    } finally {
+      setSigningOut(false);
+    }
+  }
   function updateAuthenticated() {
     setIsAuthenticated(sessionStorage.getItem("isAuthenticated"));
   }
@@ -125,17 +141,27 @@ function Layout() {
                 {isAuthenticated == "true" ? "" : <Button color="inherit" component={NavLink} to="/login" end>Sign In</Button>}
               </Box>
               <Box sx={{ flexGrow: 1 }} ></Box>
-              <Box>
+              {isAuthenticated == "true" && <Box>
                 <IconButton
                   size="large"
                   aria-label="account of current user"
                   aria-controls="menu-appbar"
                   aria-haspopup="true"
+                  aria-expanded={Boolean(accountMenu)}
                   color="inherit"
+                  onClick={(event) => setAccountMenu(event.currentTarget)}
                 >
                   <AccountCircle />
                 </IconButton>
-              </Box>
+                <Menu
+                  id="menu-appbar"
+                  anchorEl={accountMenu}
+                  open={Boolean(accountMenu)}
+                  onClose={() => setAccountMenu(null)}
+                >
+                  <MenuItem onClick={signOut} disabled={signingOut}>Sign out</MenuItem>
+                </Menu>
+              </Box>}
 
 
             </Toolbar>
@@ -146,7 +172,6 @@ function Layout() {
           <Outlet context={{ openAlert }} />
         </div>
         <AxiosNavigator></AxiosNavigator>
-        <KeepAlive></KeepAlive>
         {open ? <ClickAwayListener onClickAway={onClickAway}>
           <CustomSnackbar {...getRootProps()}>{content}</CustomSnackbar>
         </ClickAwayListener> : null}

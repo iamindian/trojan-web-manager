@@ -9,6 +9,9 @@ export async function signin(username, password){
         }
     })
 }
+export async function signout(){
+    return await axios.post(`${prefix}/signout`);
+}
 export async function getExpiration(username, password){
     return await axios.get(`${prefix}/expiration`,{
         params:{
