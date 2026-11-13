@@ -23,16 +23,18 @@ paths:
       description: |
         Validates the administrator credentials configured with `ADMIN` and
         `ADMIN_PASSWORD`. On success, sets an `access_token` HTTP-only cookie.
+        An existing valid cookie can also be used to renew the session. Sessions
+        expire after 24 hours without an authenticated request.
       parameters:
         - name: username
           in: query
-          required: true
+          required: false
           schema:
             type: string
           description: Administrator username.
         - name: password
           in: query
-          required: true
+          required: false
           schema:
             type: string
             format: password
@@ -48,6 +50,22 @@ paths:
                 example: access_token=uuid; HttpOnly
         '401':
           description: Invalid credentials.
+  /signout:
+    post:
+      tags:
+        - Authentication
+      summary: Sign out the current session
+      description: Revokes the current cookie's session and clears the cookie.
+      responses:
+        '204':
+          description: The session was revoked or no cookie was supplied.
+          headers:
+            Set-Cookie:
+              description: Clears the session cookie.
+              schema:
+                type: string
+        '500':
+          description: Session revocation failed.
   /users:
     get:
       tags:

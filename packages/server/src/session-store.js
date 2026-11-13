@@ -1,6 +1,8 @@
 import { createHash } from "crypto";
 import { Firestore } from "@google-cloud/firestore";
 
+const SESSION_TTL_MS = 24 * 60 * 60 * 1000;
+
 export function createSessionStore() {
   const db = new Firestore({
     ...(process.env.GOOGLE_CLOUD_PROJECT ? { projectId: process.env.GOOGLE_CLOUD_PROJECT } : {}),
@@ -13,16 +15,23 @@ export function createSessionStore() {
     .doc(createHash("sha256").update(token).digest("hex"));
 
   return {
-    async has(token) {
-      const snapshot = await document(token).get();
-      if (!snapshot.exists) return false;
-      // TTL deletion is asynchronous; enforce expiration on every read.
-      return snapshot.data().expiresAt.toMillis() > Date.now();
+    async touch(token) {
+      const ref = document(token);
+      return db.runTransaction(async (transaction) => {
+        const snapshot = await transaction.get(ref);
+        // A transaction prevents concurrent logout from recreating a session.
+        if (!snapshot.exists || snapshot.data().expiresAt.toMillis() <= Date.now()) return false;
+        transaction.update(ref, { expiresAt: new Date(Date.now() + SESSION_TTL_MS) });
+        return true;
+      });
     },
     async set(token) {
       await document(token).set({
-        expiresAt: new Date(Date.now() + 120 * 1000),
+        expiresAt: new Date(Date.now() + SESSION_TTL_MS),
       });
+    },
+    async delete(token) {
+      await document(token).delete();
     },
   };
 }

@@ -7,10 +7,11 @@ jest.mock("./session-store.js", () => {
   const records = new Map();
   return {
     createSessionStore: jest.fn(() => ({
-      has: jest.fn(async (token) => records.has(token)),
+      touch: jest.fn(async (token) => records.has(token)),
       set: jest.fn(async (token) => {
         records.set(token, true);
       }),
+      delete: jest.fn(async (token) => records.delete(token)),
     })),
   };
 });
@@ -133,8 +134,8 @@ describe("combined Cloud Run service", () => {
       .expect(200);
     const cookie = signin.headers["set-cookie"][0].split(";")[0];
     expect(nodeCache.has(cookie.split("=")[1])).toBe(false);
-    const renewed = await request.get("/api/signin").set("Cookie", cookie).expect(200);
-    expect(renewed.headers["set-cookie"][0].split(";")[0]).not.toBe(cookie);
+    await request.get("/api/signin").set("Cookie", cookie).expect(200);
+    expect(sessionStore.touch).toHaveBeenCalledWith(cookie.split("=")[1]);
   });
 
   it("checks persisted authentication even when a response is cached", async () => {
@@ -144,7 +145,7 @@ describe("combined Cloud Run service", () => {
     const cookie = signin.headers["set-cookie"][0].split(";")[0];
     await request.get("/api/users")
       .set("Cookie", cookie).query({ offset: 0, limit: 5 }).expect(200);
-    sessionStore.has.mockResolvedValueOnce(false);
+    sessionStore.touch.mockResolvedValueOnce(false);
     await request.get("/api/users")
       .set("Cookie", cookie).query({ offset: 0, limit: 5 }).expect(401);
   });
@@ -158,10 +159,36 @@ describe("combined Cloud Run service", () => {
   });
 
   it("does not authenticate when session storage is unavailable", async () => {
-    sessionStore.has.mockRejectedValueOnce(new Error("Firestore unavailable"));
+    sessionStore.touch.mockRejectedValueOnce(new Error("Firestore unavailable"));
     await request.get("/api/users")
       .set("Cookie", "access_token=unavailable")
       .query({ offset: 0, limit: 5 })
       .expect(500);
+  });
+
+  it("logs out only the current session, clears the cookie, and rejects the old token", async () => {
+    const first = await request.get("/api/signin")
+      .query({ username: "test-admin", password: "test-password" }).expect(200);
+    const second = await request.get("/api/signin")
+      .query({ username: "test-admin", password: "test-password" }).expect(200);
+    const cookie = first.headers["set-cookie"][0].split(";")[0];
+    const otherCookie = second.headers["set-cookie"][0].split(";")[0];
+    const logout = await request.post("/api/signout").set("X-Forwarded-Proto", "https")
+      .set("Cookie", cookie).expect(204);
+    expect(logout.headers["set-cookie"][0]).toMatch(/access_token=;/);
+    expect(logout.headers["set-cookie"][0]).toMatch(/expires=Thu, 01 Jan 1970/i);
+    expect(logout.headers["set-cookie"][0]).toMatch(/secure/i);
+    await request.get("/api/users").set("Cookie", cookie)
+      .query({ offset: 0, limit: 5 }).expect(401);
+    await request.get("/api/users").set("Cookie", otherCookie)
+      .query({ offset: 0, limit: 5 }).expect(200);
+    await request.post("/api/signout").expect(204);
+  });
+
+  it("does not claim logout succeeded when revocation fails", async () => {
+    sessionStore.delete.mockRejectedValueOnce(new Error("Firestore unavailable"));
+    const response = await request.post("/api/signout")
+      .set("Cookie", "access_token=unavailable").expect(500);
+    expect(response.headers["set-cookie"]).toBeUndefined();
   });
 });

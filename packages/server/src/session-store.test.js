@@ -6,7 +6,7 @@ jest.mock("@google-cloud/firestore", () => ({ Firestore: jest.fn() }));
 
 describe("Firestore sessions", () => {
   const originalEnv = { ...process.env };
-  let records, collection, doc, write;
+  let records, collection, doc, write, transaction;
 
   beforeEach(() => {
     jest.useFakeTimers().setSystemTime(new Date("2026-01-01T00:00:00Z"));
@@ -18,11 +18,24 @@ describe("Firestore sessions", () => {
       records.set(id, { expiresAt: { toMillis: () => value.expiresAt.getTime() } });
     });
     doc = jest.fn((id) => ({
+      id,
       set: (value) => write(id, value),
+      delete: async () => records.delete(id),
       get: async () => ({ exists: records.has(id), data: () => records.get(id) }),
     }));
     collection = jest.fn(() => ({ doc }));
-    Firestore.mockImplementation(() => ({ collection }));
+    transaction = {
+      get: (ref) => ref.get(),
+      update: (ref, value) => write(ref.id, value),
+    };
+    Firestore.mockImplementation(() => ({
+      collection,
+      runTransaction: async (callback) => {
+        const result = await callback(transaction);
+        await Promise.resolve();
+        return result;
+      },
+    }));
   });
 
   afterEach(() => {
@@ -34,7 +47,7 @@ describe("Firestore sessions", () => {
     const first = createSessionStore();
     await first.set("secret-token");
     const second = createSessionStore();
-    expect(await second.has("secret-token")).toBe(true);
+    expect(await second.touch("secret-token")).toBe(true);
     expect(collection).toHaveBeenCalledWith("test_sessions");
     expect(doc).toHaveBeenCalledWith(createHash("sha256").update("secret-token").digest("hex"));
     expect(JSON.stringify([...records])).not.toContain("secret-token");
@@ -43,23 +56,36 @@ describe("Firestore sessions", () => {
     });
   });
 
-  it("rejects unknown tokens and sessions at their original 120-second expiry even before TTL deletion", async () => {
+  it("extends activity by 24 hours and rejects expired sessions even before TTL deletion", async () => {
     const store = createSessionStore();
-    expect(await store.has("missing")).toBe(false);
+    expect(await store.touch("missing")).toBe(false);
     await store.set("token");
-    jest.advanceTimersByTime(119999);
-    expect(await store.has("token")).toBe(true);
-    jest.advanceTimersByTime(1);
-    expect(await store.has("token")).toBe(false);
+    jest.advanceTimersByTime(23 * 60 * 60 * 1000);
+    expect(await store.touch("token")).toBe(true);
+    jest.advanceTimersByTime(23 * 60 * 60 * 1000);
+    expect(await store.touch("token")).toBe(true);
+    jest.advanceTimersByTime(24 * 60 * 60 * 1000);
+    expect(await store.touch("token")).toBe(false);
     expect(records.size).toBe(1);
+  });
+
+  it("deletes only the requested session and does not recreate it on activity", async () => {
+    const store = createSessionStore();
+    await store.set("token");
+    await store.set("other");
+    await store.delete("token");
+    expect(await store.touch("token")).toBe(false);
+    expect(await store.touch("other")).toBe(true);
   });
 
   it("propagates read and write failures rather than using local sessions", async () => {
     const store = createSessionStore();
     write.mockRejectedValueOnce(new Error("write failed"));
     await expect(store.set("token")).rejects.toThrow("write failed");
-    doc.mockReturnValueOnce({ get: async () => { throw new Error("read failed"); } });
-    await expect(store.has("token")).rejects.toThrow("read failed");
+    transaction.get = async () => { throw new Error("read failed"); };
+    await expect(store.touch("token")).rejects.toThrow("read failed");
+    doc.mockReturnValueOnce({ delete: async () => { throw new Error("delete failed"); } });
+    await expect(store.delete("token")).rejects.toThrow("delete failed");
   });
 
 });

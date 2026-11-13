@@ -56,7 +56,7 @@ const userAuth = function () {
       ctx.throw('Access denied. Please login!', 401);
       return
     }
-    if (!await sessionStore.has(token)) {
+    if (!await sessionStore.touch(token)) {
       ctx.throw('Access denied. Please login!', 401);
       return
     }
@@ -101,8 +101,8 @@ async function start() {
        * update token
        */
       const accessToken = ctx.cookies.get('access_token')
-      if (accessToken && await sessionStore.has(accessToken)) {
-        await setToken(ctx)
+      if (accessToken && await sessionStore.touch(accessToken)) {
+        ctx.status = 200;
         return
       }
       /**
@@ -113,6 +113,12 @@ async function start() {
         return
       }
       ctx.status = 401;
+    })
+    .post("/signout", async (ctx) => {
+      const token = ctx.cookies.get("access_token");
+      if (token) await sessionStore.delete(token);
+      ctx.cookies.set("access_token", null, { httpOnly: true, secure: ctx.secure, sameSite: "lax" });
+      ctx.status = 204;
     })
     .get("/users", async (ctx, next) => {
       const offset = parseInt(ctx.request.query.offset);

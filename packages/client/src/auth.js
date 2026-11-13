@@ -1,4 +1,4 @@
-import {signin as login} from "./api/userService";
+import {signin as login, signout as logout} from "./api/userService";
 export default {
     async signin(username, password) {
         const response = await login(username, password) 
@@ -8,7 +8,8 @@ export default {
         }
     },
     async signout() {
-        // request server to clear cookie and change isAuthenticated to false;
+        await logout();
         sessionStorage.setItem('isAuthenticated', 'false');
+        window.dispatchEvent(new Event('storage'));
     },
 }

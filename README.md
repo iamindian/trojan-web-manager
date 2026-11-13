@@ -93,8 +93,10 @@ address, not the database host. Never put passwords in the image or commit `.env
 files; both Docker and Cloud Build uploads exclude them.
 
 Login sessions are stored in Firestore, so unexpired sessions survive restarts,
-deployments, and requests to different instances. They retain the existing
-120-second lifetime. Tokens are hashed before being used as document IDs.
+deployments, and requests to different instances. Sessions expire after 24 hours
+without an authenticated request; background keep-alive requests do not extend
+them. Use the avatar menu to sign out and revoke the current session. Tokens are
+hashed before being used as document IDs.
 User records remain in MySQL and five-second response caches remain process-local.
 The one-instance deployment limit above is optional for session consistency.
 
