@@ -32,7 +32,7 @@ function Layout() {
       },
     },
   });
-  const [isAuthenticated, setIsAuthenticated] = useState("false");
+  const [isAuthenticated, setIsAuthenticated] = useState(() => sessionStorage.getItem("isAuthenticated") || "false");
   const listener = useRef(null);
   const blue = {
     200: '#99CCF3',
