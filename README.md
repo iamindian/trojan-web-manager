@@ -1,6 +1,17 @@
 ## Trojan Web Manager
 
 This is a web based user management system for trojan server
+
+The public Query page looks up expiration by username only, without a password.
+Anyone who knows a username can view its expiration through `/api/expiration`
+(`/expiration` when running the standalone server). Administrator sign-in and
+user creation still require passwords. The Users list is the supported user
+listing page; it displays a full-page table below the toolbar with infinite
+scrolling and clickable users for editing. The Grid page has been removed.
+Use the username search field to filter all users, including those not yet loaded.
+Plain text matches anywhere; `*` matches any number of characters (for example
+`alice*smith`). Clearing the field restores all users. Matching case sensitivity
+follows the database collation.
 ![login capture](./captures/login.png?raw=true "login")
 ![query capture](./captures/query.png?raw=true "query")
 ![renew capture](./captures/renew.png?raw=true "renew")
@@ -76,6 +87,15 @@ Open the resulting service URL to use the client. `--allow-unauthenticated`
 allows access to the login page; application administrator authentication still
 applies to protected API routes, including `/api/extendById`, which now requires
 the same administrator cookie as the other subscription mutation endpoints.
+
+Open `/docs` on the service URL to view the self-hosted Swagger UI. The
+machine-readable specification is available at `/openapi.json`; its server URL
+automatically matches the API prefix (`/api` in the container). Sign in through
+the client or Swagger's `/signin` operation before trying administrator endpoints.
+The browser sends the HTTP-only session cookie automatically; it cannot be
+entered through Swagger's Authorize dialog. Documentation assets are bundled
+in the container, and no external Swagger validator is used. The docs are public
+unless access to the entire service is restricted with Cloud Run IAM.
 
 For continuous deployment from GitHub, configure the Cloud Build trigger with
 **Configuration: Cloud Build configuration file** and location `/cloudbuild.yaml`.

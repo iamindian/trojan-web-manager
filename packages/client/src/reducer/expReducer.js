@@ -2,11 +2,11 @@ const initializtion = { expiration: "--", loading: false };
 export default function expReducer(state = initializtion, action) {
   switch (action.type) {
     case "update":
-      return {expiration: action.payload.expiration}
+      return {...state, expiration: action.payload.expiration}
     case "loading":
-      return {loading: true}
+      return {...state, loading: true}
     case "loaded":
-      return {loading: false}
+      return {...state, loading: false}
     default:
       return state
   }

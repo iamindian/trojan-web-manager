@@ -1,23 +1,29 @@
 
 import { ssh224 } from "../utils/index.js";
-import { QueryTypes } from "sequelize"
+import { Op, QueryTypes } from "sequelize"
 import BigNumber from "bignumber.js"
 import moment from "moment";
 let sequelize = null;
 export async function init(sequelizeInstance) {
   sequelize = sequelizeInstance;
 }
-export async function getUsers(offset, limit, where) {
+export async function getUsers(offset, limit, filters = {}, username = "") {
+  const where = { ...filters };
+  if (username) {
+    const pattern = username.replace(/[\\%_]/g, "\\$&").replace(/\*/g, "%");
+    where.username = { [Op.like]: `%${pattern}%` };
+  }
   const users = await sequelize.models.User.findAll({ offset, limit, where });
-  const total = await sequelize.models.User.count();
+  const total = await sequelize.models.User.count({ where });
   return { users, total };
 }
 export async function addUser(username, password) {
   const User = sequelize.models.User;
   return await User.create({ username, password: ssh224(username, password), delta: 1, quota: -1, start: Date.now(), download:0, upload:0 });
 }
-export async function getUserExpiration(username, password) {
-  return await sequelize.query(`select DATEDIFF(DATE_ADD(start, INTERVAL delta MONTH), now()) as expiration from users where password = '${ssh224(username, password)}'`, {
+export async function getUserExpiration(username) {
+  return await sequelize.query("select DATEDIFF(DATE_ADD(start, INTERVAL delta MONTH), now()) as expiration from users where username = :username", {
+    replacements: { username },
     type: QueryTypes.SELECT,
     raw: true,
   })

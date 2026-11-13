@@ -18,6 +18,7 @@ import { init as userModel } from "./models/User.model.js";
 import yargs from 'yargs'
 import { ssh224 } from "./utils/index.js";
 import { serveClient } from "./serve-client.js";
+import { serveDocs } from "./serve-docs.js";
 const args = yargs(process.argv.slice(2)).argv
 if (args.env) {
   dotenv.config({ path: args.env });
@@ -63,6 +64,9 @@ const userAuth = function () {
     await next();
   }
 }
+const handleError = function (ctx, e) {
+  ctx.body = { error: e.message };
+}
 const cached = async (ctx, key, func) => {
   try {
     if (nodeCache.has(key)) {
@@ -75,6 +79,7 @@ const cached = async (ctx, key, func) => {
       ctx.body = result;
     }
   } catch (e) {
+    ctx.status = 500;
     handleError(ctx, e);
   }
 
@@ -90,9 +95,6 @@ async function start() {
   await userService(sequelize);
   app.use(bodyParser());
   router.use(["/users", "/extend", "/extendById", "/adduser"], userAuth())
-  const handleError = function (ctx, e) {
-    ctx.body = { error: e.message };
-  }
   router
     .get("/signin", async (ctx, next) => {
       const username = ctx.request.query.username;
@@ -124,6 +126,12 @@ async function start() {
       const offset = parseInt(ctx.request.query.offset);
       const limit = parseInt(ctx.request.query.limit);
       const id = ctx.request.query.id;
+      const username = ctx.request.query.username || "";
+      if (typeof username !== "string") {
+        ctx.status = 400;
+        ctx.body = { error: "username must be a string" };
+        return;
+      }
       if (Number.isNaN(offset) || Number.isNaN(limit)) {
         ctx.body = { error: 'wrong params' }
         return;
@@ -132,21 +140,25 @@ async function start() {
       if (id && !Number.isNaN(id)) {
         where = Object.assign({}, where, { id })
       }
-      const key = ssh224(`/users`, `${id ? id : ""}:${offset}:${limit}`);
+      const key = ssh224(`/users`, JSON.stringify([id || "", offset, limit, username]));
       await cached(ctx, key, () => {
         return async () => {
-          return await getUsers(offset, limit, where);
+          return await getUsers(offset, limit, where, username);
         }
       });
 
     })
     .get("/expiration", async (ctx, next) => {
       const username = ctx.request.query.username;
-      const password = ctx.request.query.password;
-      const key = ssh224("/expiration", `${username}:${password}`)
+      if (typeof username !== "string" || !username.trim()) {
+        ctx.status = 400;
+        ctx.body = { error: "username is required" };
+        return;
+      }
+      const key = ssh224("/expiration", username)
       await cached(ctx, key, () => {
         return async () => {
-          return await getUserExpiration(username, password);
+          return await getUserExpiration(username);
         }
       });
     })
@@ -182,6 +194,7 @@ async function start() {
       }
     });
   app.use(router.routes());
+  app.use(serveDocs(apiPrefix));
   if (process.env.CLIENT_DIST) {
     app.use(serveClient(path.resolve(process.env.CLIENT_DIST), apiPrefix));
   }

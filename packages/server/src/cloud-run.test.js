@@ -20,7 +20,7 @@ jest.mock("./models/User.model.js", () => ({ init: jest.fn() }));
 jest.mock("./service/userService.js", () => ({
   init: jest.fn(),
   getUsers: jest.fn().mockResolvedValue({ users: [], total: 0 }),
-  getUserExpiration: jest.fn(),
+  getUserExpiration: jest.fn().mockResolvedValue([{ expiration: 30 }]),
   addUser: jest.fn(),
   extendExpiration: jest.fn(),
   extendExpirationById: jest.fn().mockResolvedValue({ id: 1, delta: 2 }),
@@ -91,6 +91,29 @@ describe("combined Cloud Run service", () => {
     await request.head("/").expect(200).expect("Content-Type", /text\/html/);
   });
 
+  it.each(["/docs", "/docs/"])("serves Swagger UI at %s instead of the client SPA", async (url) => {
+    const response = await request.get(url).expect(200);
+    expect(response.type).toBe("text/html");
+    expect(response.text).toContain('url: "/openapi.json"');
+    expect(response.text).toContain('href="/docs/swagger-ui.css"');
+    expect(response.text).toContain('src="/docs/swagger-ui-bundle.js"');
+    expect(response.text).toContain("validatorUrl: null");
+    expect(response.text).toContain("withCredentials: true");
+  });
+
+  it("serves a same-origin specification and bundled Swagger assets", async () => {
+    const response = await request.get("/openapi.json").expect(200);
+    expect(response.type).toBe("application/json");
+    expect(response.body.openapi).toBe("3.0.3");
+    expect(response.body.servers).toEqual([{ url: "/api", description: "This server" }]);
+    expect(response.body.paths["/signin"].get).toBeDefined();
+    expect(response.body.paths["/extendById"].put.security).toEqual([{ AccessTokenCookie: [] }]);
+    await request.get("/docs/swagger-ui.css").expect(200).expect("Content-Type", /text\/css/);
+    await request.get("/docs/swagger-ui-bundle.js").expect(200).expect("Content-Type", /javascript/);
+    await request.head("/docs").expect(200).expect("Content-Type", /text\/html/);
+    await request.get("/docs/missing").expect(404);
+  });
+
   it.each(["/api", "/api/missing", "/assets/missing.js"])("does not return HTML for %s", async (url) => {
     const response = await request.get(url);
     expect(response.status).toBe(404);
@@ -100,6 +123,47 @@ describe("combined Cloud Run service", () => {
   it("keeps the prefixed API protected", async () => {
     await request.get("/api/users").query({ offset: 0, limit: 5 }).expect(401);
     await request.put("/api/extendById").send({ id: 1, quantity: 1 }).expect(401);
+  });
+
+  it("allows username-only expiration lookup without administrator authentication", async () => {
+    const { getUserExpiration } = require("./service/userService.js");
+    await request.get("/api/expiration").query({ username: "alice" })
+      .expect(200, [{ expiration: 30 }]);
+    expect(getUserExpiration).toHaveBeenLastCalledWith("alice");
+    const calls = getUserExpiration.mock.calls.length;
+    await request.get("/api/expiration").query({ username: "alice" })
+      .expect(200, [{ expiration: 30 }]);
+    expect(getUserExpiration).toHaveBeenCalledTimes(calls);
+    await request.get("/api/expiration").query({ username: "bob" }).expect(200);
+    expect(getUserExpiration).toHaveBeenLastCalledWith("bob");
+  });
+
+  it("forwards username filters and keeps cached search results separate", async () => {
+    const { getUsers } = require("./service/userService.js");
+    const signin = await request.get("/api/signin")
+      .query({ username: "test-admin", password: "test-password" }).expect(200);
+    const cookie = signin.headers["set-cookie"][0].split(";")[0];
+    for (const username of ["alice*", "bob*", ""]) {
+      await request.get("/api/users").set("Cookie", cookie)
+        .query({ offset: 0, limit: 25, username }).expect(200);
+      expect(getUsers).toHaveBeenLastCalledWith(0, 25, {}, username);
+    }
+    const calls = getUsers.mock.calls.length;
+    await request.get("/api/users").set("Cookie", cookie)
+      .query({ offset: 0, limit: 25, username: "alice*" }).expect(200);
+    expect(getUsers).toHaveBeenCalledTimes(calls);
+  });
+
+  it.each([{}, { username: "" }, { username: " " }])("rejects an empty expiration query %j", async (query) => {
+    await request.get("/api/expiration").query(query)
+      .expect(400, { error: "username is required" });
+  });
+
+  it("reports failed expiration lookups instead of returning a successful empty result", async () => {
+    const { getUserExpiration } = require("./service/userService.js");
+    getUserExpiration.mockRejectedValueOnce(new Error("Database unavailable"));
+    await request.get("/api/expiration").query({ username: "unavailable" })
+      .expect(500, { error: "Database unavailable" });
   });
 
   it("issues secure same-origin cookies behind the HTTPS proxy and accepts them", async () => {

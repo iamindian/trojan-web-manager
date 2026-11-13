@@ -71,7 +71,7 @@ paths:
       tags:
         - Users
       summary: List users
-      description: Returns a page of users, optionally filtered by user ID.
+      description: Returns a page of users, optionally filtered by user ID and username.
       security:
         - AccessTokenCookie: []
       parameters:
@@ -95,9 +95,15 @@ paths:
           schema:
             type: integer
           description: Restrict results to this user ID.
+        - name: username
+          in: query
+          schema:
+            type: string
+          description: Case sensitivity follows the database collation. Matches anywhere; * matches any number of characters. Percent and underscore are literal.
+          example: alice*
       responses:
         '200':
-          description: A page of users and the total user count.
+          description: A page of users and the matching user count.
           content:
             application/json:
               schema:
@@ -112,7 +118,7 @@ paths:
                       $ref: '#/components/schemas/User'
                   total:
                     type: integer
-                    description: Total number of users in the database.
+                    description: Total number of users matching the filters.
               example:
                 users:
                   - id: 1
@@ -133,7 +139,8 @@ paths:
         - Expiration
       summary: Get a user's expiration
       description: |
-        Looks up a user's expiration by their username and plaintext password.
+        Looks up expiration by username only; no password is required.
+        Anyone who knows a username can view its expiration.
         This route does not require the administrator session cookie.
       parameters:
         - name: username
@@ -141,15 +148,9 @@ paths:
           required: true
           schema:
             type: string
-        - name: password
-          in: query
-          required: true
-          schema:
-            type: string
-            format: password
       responses:
         '200':
-          description: Expiration result rows; the day count can be null if unavailable.
+          description: Expiration result rows, or an empty array if no users match. The day count can be null if unavailable.
           content:
             application/json:
               schema:
@@ -165,6 +166,12 @@ paths:
                       description: Days until expiration.
               example:
                 - expiration: 30
+        '400':
+          description: Missing or empty username.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
   /extend:
     put:
       tags:

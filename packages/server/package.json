@@ -36,8 +36,10 @@
     "mysql2": "^3.5.1",
     "node-cache": "^5.1.2",
     "sequelize": "^6.32.1",
+    "swagger-ui-dist": "^5.0.0",
     "uuid": "^9.0.0",
-    "yargs": "^17.7.2"
+    "yargs": "^17.7.2",
+    "yaml": "^2.0.0"
   },
   "devDependencies": {
     "@babel/cli": "^7.22.10",
