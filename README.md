@@ -39,7 +39,7 @@ From the repository root, with the Google Cloud CLI installed and authenticated:
 
 ```sh
 gcloud config set project YOUR_PROJECT_ID
-gcloud services enable run.googleapis.com cloudbuild.googleapis.com artifactregistry.googleapis.com secretmanager.googleapis.com
+gcloud services enable run.googleapis.com cloudbuild.googleapis.com artifactregistry.googleapis.com secretmanager.googleapis.com firestore.googleapis.com
 ```
 
 Create Secret Manager secrets named `twm-admin-password` and `twm-db-password`
@@ -48,6 +48,14 @@ service account `roles/secretmanager.secretAccessor` on those secrets, and ensur
 the deploying account can act as that service account and build/deploy services.
 Use a MySQL database with the existing Trojan schema and subscription columns;
 the application does not create or migrate database tables.
+
+Create the default **Cloud Firestore database in Native mode** in your Firebase
+project before starting the service. Grant the Cloud Run runtime service account
+`roles/datastore.user` on that project. Sessions use the Firestore server SDK with
+Application Default Credentials (the attached runtime service account on Cloud
+Run); no service-account key belongs in the image. Keep client access to the
+session collection denied in Firestore Security Rules; the server SDK uses IAM
+and bypasses those rules.
 
 For Cloud SQL for MySQL, also grant the runtime service account
 `roles/cloudsql.client`, then deploy:
@@ -60,7 +68,7 @@ gcloud run deploy trojan-web-manager \
   --allow-unauthenticated \
   --max-instances 1 \
   --add-cloudsql-instances YOUR_PROJECT_ID:YOUR_REGION:YOUR_SQL_INSTANCE \
-  --set-env-vars DATABASE=trojan,USERNAME=YOUR_DB_USER,ADMIN=YOUR_ADMIN_USER,DB_SOCKET_PATH=/cloudsql/YOUR_PROJECT_ID:YOUR_REGION:YOUR_SQL_INSTANCE \
+  --set-env-vars DATABASE=trojan,USERNAME=YOUR_DB_USER,ADMIN=YOUR_ADMIN_USER,GOOGLE_CLOUD_PROJECT=YOUR_PROJECT_ID,DB_SOCKET_PATH=/cloudsql/YOUR_PROJECT_ID:YOUR_REGION:YOUR_SQL_INSTANCE \
   --set-secrets ADMIN_PASSWORD=twm-admin-password:latest,PASSWORD=twm-db-password:latest
 ```
 
@@ -84,13 +92,32 @@ Private-IP databases require Cloud Run VPC networking. `HOST` is the HTTP bind
 address, not the database host. Never put passwords in the image or commit `.env`
 files; both Docker and Cloud Build uploads exclude them.
 
-Sessions and response caches are currently process-local. Keep the service at one
-instance (as above); scale-to-zero, restarts, and deployments invalidate sessions.
-Shared session storage is required before enabling multiple instances.
+Login sessions are stored in Firestore, so unexpired sessions survive restarts,
+deployments, and requests to different instances. They retain the existing
+120-second lifetime. Tokens are hashed before being used as document IDs.
+User records remain in MySQL and five-second response caches remain process-local.
+The one-instance deployment limit above is optional for session consistency.
+
+Enable TTL cleanup for the session collection's `expiresAt` field:
+
+```sh
+gcloud firestore fields ttls update expiresAt \
+  --collection-group=twm_sessions --enable-ttl \
+  --project=YOUR_PROJECT_ID
+```
+
+Expired sessions are rejected immediately even if Firestore's asynchronous TTL
+cleanup has not deleted them yet. Set `FIRESTORE_COLLECTION_PREFIX` (default
+`twm`) consistently on all instances; if changed, apply the TTL policy to
+`YOUR_PREFIX_sessions` instead. Firestore failures fail authentication rather
+than falling back to memory.
 
 To try the same container locally, create an untracked environment file outside
 the repository with `DATABASE`, `USERNAME`, `PASSWORD`, `ADMIN`,
-`ADMIN_PASSWORD`, and `DB_HOST` pointing to a database reachable from the container:
+`ADMIN_PASSWORD`, `GOOGLE_CLOUD_PROJECT`, and `DB_HOST` pointing to a database
+reachable from the container. Provide Application Default Credentials inside the
+container (for example, mount a credentials file read-only and set
+`GOOGLE_APPLICATION_CREDENTIALS` to its container path):
 
 ```sh
 docker build -t trojan-web-manager .
@@ -117,6 +144,8 @@ USERNAME=username
 PASSWORD=password
 ADMIN=admin
 ADMIN_PASSWORD=850702
+GOOGLE_CLOUD_PROJECT=your_firebase_project_id
+FIRESTORE_COLLECTION_PREFIX=twm
 LOG=false
 
 ```
@@ -131,6 +160,13 @@ container with `docker run --env-file /path/to/.env ...`.
 Cloud Run does not automatically load your local `.env`; configure `DB_HOST`
 and `DB_PORT` as service environment variables and passwords through Secret
 Manager as described above.
+
+For local development, authenticate using `gcloud auth application-default login`
+with an account authorized for the Firestore project, or set
+`GOOGLE_APPLICATION_CREDENTIALS` to an untracked service-account JSON file outside
+the repository. The Firestore server SDK also supports
+`FIRESTORE_EMULATOR_HOST=127.0.0.1:8081` for local Firestore emulation; still set
+`GOOGLE_CLOUD_PROJECT` to the emulator project ID.
 
 #### Start frontend
 ``

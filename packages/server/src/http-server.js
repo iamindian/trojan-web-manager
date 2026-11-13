@@ -7,6 +7,7 @@ import { Sequelize } from "sequelize";
 import { getUsers, getUserExpiration, addUser, init as userService, extendExpiration, extendExpirationById } from "./service/userService.js";
 import { v4 as uuidv4 } from 'uuid';
 import NodeCache from 'node-cache';
+import { createSessionStore } from "./session-store.js";
 // import https from "https";
 import { init as userModel } from "./models/User.model.js";
 // import { fileURLToPath } from 'url';
@@ -24,6 +25,7 @@ if (args.env) {
   dotenv.config({ path: path.resolve(__dirname, '../.env') });
 }
 const nodeCache = new NodeCache({ stdTTL: 120, checkperiod: 120 });
+const sessionStore = createSessionStore();
 const database = process.env.DATABASE;
 const username = process.env.USERNAME;
 const password = process.env.PASSWORD;
@@ -54,7 +56,7 @@ const userAuth = function () {
       ctx.throw('Access denied. Please login!', 401);
       return
     }
-    if (!nodeCache.get(token)) {
+    if (!await sessionStore.has(token)) {
       ctx.throw('Access denied. Please login!', 401);
       return
     }
@@ -77,9 +79,9 @@ const cached = async (ctx, key, func) => {
   }
 
 }
-function setToken(ctx) {
+async function setToken(ctx) {
   const newToken = uuidv4();
-  nodeCache.set(newToken, Date.now());
+  await sessionStore.set(newToken);
   ctx.cookies.set('access_token', newToken, { httpOnly: true, secure: ctx.secure, sameSite: "lax" });
   ctx.status = 200;
 }
@@ -95,27 +97,22 @@ async function start() {
     .get("/signin", async (ctx, next) => {
       const username = ctx.request.query.username;
       const password = ctx.request.query.password;
-      try {
-        /**
-         * update token
-         */
-        const accessToken = ctx.cookies.get('access_token')
-        if (accessToken && nodeCache.has(accessToken)) {
-          setToken(ctx)
-          return
-        }
-        /**
-         * check username and password
-         */
-        if (username && password && username === process.env.ADMIN && password === process.env.ADMIN_PASSWORD) {
-          setToken(ctx)
-          return
-        }
-        ctx.status = 401;
-
-      } catch (e) {
-        handleError(ctx, e);
+      /**
+       * update token
+       */
+      const accessToken = ctx.cookies.get('access_token')
+      if (accessToken && await sessionStore.has(accessToken)) {
+        await setToken(ctx)
+        return
       }
+      /**
+       * check username and password
+       */
+      if (username && password && username === process.env.ADMIN && password === process.env.ADMIN_PASSWORD) {
+        await setToken(ctx)
+        return
+      }
+      ctx.status = 401;
     })
     .get("/users", async (ctx, next) => {
       const offset = parseInt(ctx.request.query.offset);
@@ -187,7 +184,7 @@ async function start() {
   });
   return server;
 }
-export { sequelize, start, nodeCache }
+export { sequelize, start, nodeCache, sessionStore }
 
 
 

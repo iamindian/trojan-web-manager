@@ -3,6 +3,18 @@ import os from "os";
 import path from "path";
 import supertest from "supertest";
 
+jest.mock("./session-store.js", () => {
+  const records = new Map();
+  return {
+    createSessionStore: jest.fn(() => ({
+      has: jest.fn(async (token) => records.has(token)),
+      set: jest.fn(async (token) => {
+        records.set(token, true);
+      }),
+    })),
+  };
+});
+
 jest.mock("./models/User.model.js", () => ({ init: jest.fn() }));
 jest.mock("./service/userService.js", () => ({
   init: jest.fn(),
@@ -14,7 +26,7 @@ jest.mock("./service/userService.js", () => ({
 }));
 
 describe("combined Cloud Run service", () => {
-  let server, request, sequelize, nodeCache, clientRoot;
+  let server, request, sequelize, nodeCache, sessionStore, clientRoot;
   const originalEnv = { ...process.env };
   const originalArgv = [...process.argv];
 
@@ -44,6 +56,7 @@ describe("combined Cloud Run service", () => {
     const httpServer = require("./http-server.js");
     sequelize = httpServer.sequelize;
     nodeCache = httpServer.nodeCache;
+    sessionStore = httpServer.sessionStore;
     server = await httpServer.start();
     request = supertest(server);
   });
@@ -112,5 +125,43 @@ describe("combined Cloud Run service", () => {
       .query({ username: "test-admin", password: "test-password" })
       .expect(200);
     expect(response.headers["set-cookie"][0]).not.toMatch(/;\s*secure/i);
+  });
+
+  it("renews a persisted session without putting the token in the response cache", async () => {
+    const signin = await request.get("/api/signin")
+      .query({ username: "test-admin", password: "test-password" })
+      .expect(200);
+    const cookie = signin.headers["set-cookie"][0].split(";")[0];
+    expect(nodeCache.has(cookie.split("=")[1])).toBe(false);
+    const renewed = await request.get("/api/signin").set("Cookie", cookie).expect(200);
+    expect(renewed.headers["set-cookie"][0].split(";")[0]).not.toBe(cookie);
+  });
+
+  it("checks persisted authentication even when a response is cached", async () => {
+    const signin = await request.get("/api/signin")
+      .query({ username: "test-admin", password: "test-password" })
+      .expect(200);
+    const cookie = signin.headers["set-cookie"][0].split(";")[0];
+    await request.get("/api/users")
+      .set("Cookie", cookie).query({ offset: 0, limit: 5 }).expect(200);
+    sessionStore.has.mockResolvedValueOnce(false);
+    await request.get("/api/users")
+      .set("Cookie", cookie).query({ offset: 0, limit: 5 }).expect(401);
+  });
+
+  it("awaits session persistence before issuing a cookie", async () => {
+    sessionStore.set.mockRejectedValueOnce(new Error("Firestore unavailable"));
+    const response = await request.get("/api/signin")
+      .query({ username: "test-admin", password: "test-password" })
+      .expect(500);
+    expect(response.headers["set-cookie"]).toBeUndefined();
+  });
+
+  it("does not authenticate when session storage is unavailable", async () => {
+    sessionStore.has.mockRejectedValueOnce(new Error("Firestore unavailable"));
+    await request.get("/api/users")
+      .set("Cookie", "access_token=unavailable")
+      .query({ offset: 0, limit: 5 })
+      .expect(500);
   });
 });
